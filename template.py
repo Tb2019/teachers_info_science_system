@@ -54,8 +54,13 @@ class SpecialSpider(ReCrawler):
                 if not re.match(r'[A-Za-z\s]*$', name, re.S):  # 中文名替换空格
                     name = re.sub(r'\s*', '', name)
                 name = re.sub(self.name_filter_re, '', name)
-                link = a.xpath('./@href')[0]
-                link = parse.urljoin(url, link)
+                try:
+                    link = a.xpath('./@href')[0]
+                    if link in ('#',):
+                        continue
+                    link = parse.urljoin(url, link)
+                except:
+                    continue
             else:
                 print('未解析到name，请检查：a_s_xpath_str')
                 continue
