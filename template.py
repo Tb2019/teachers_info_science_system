@@ -275,8 +275,11 @@ class SpecialSpider(ReCrawler):
 
         for name, url in index_result:
             if len(name) >= 2:
+            try:
                 driver.get(url)
-                time.sleep(2)
+                time.sleep(1)
+            except:
+                continue
                 page = driver.page_source
                 detail_pages.append((page, url, [('name', name)]))
         driver.close()
@@ -316,8 +319,11 @@ class SpecialSpider(ReCrawler):
             })
             driver.execute_cdp_cmd("Network.enable", {})
             driver.execute_cdp_cmd("Network.setExtraHTTPHeaders", {"headers": {"User-Agent": "browser1"}})
-            driver.get(url)
-            time.sleep(2)
+            try:
+                driver.get(url)
+                time.sleep(2)
+            except:
+                continue
             index_page = driver.page_source
             driver.close()
             index_result = self.parse_index(index_page, url)
