@@ -2,6 +2,8 @@ import os
 import json
 import re
 import time
+
+import demjson3
 import pymysql
 import requests
 import pandas as pd
@@ -140,6 +142,9 @@ prompt = {
                 ### 技能16: 筛选论文
                 - 从简历中找出论文信息，如果没有则返回空白。
                 
+                ### 技能17: 筛选教育经历、工作经历
+                - 从简历中找出工作经历和教育经历，如果没有则返回空白。
+                
                 ## 约束条件
                 - 返回结果不要携带任何html标签。
                 - 对于无法找到的信息，返回空白值。
@@ -174,7 +179,9 @@ prompt = {
                         "职位":"",
                         "办公地点":"",
                         "个人网址":"",
-                        "科研论文":[]
+                        "科研论文":[],
+                        "教育经历":[],
+                        "工作经历":[]
                     }
                 """,
     'prompt_1': """
@@ -288,6 +295,9 @@ prompt = {
                 ### 技能2: 筛选论文
                 - 从简历中找出论文信息，如果没有则返回空白。
                 
+                ### 技能3: 筛选教育经历、工作经历
+                - 从简历中找出工作经历和教育经历，如果没有则返回空白。
+                
                 ## 约束条件
                 - 返回结果不要携带任何html标签。
                 - 对于无法找到的信息，返回空白值。
@@ -305,7 +315,9 @@ prompt = {
                     {
                         "姓名":"",
                         "个人简介":"",
-                        "科研论文":[]
+                        "科研论文":[],
+                        "教育经历":[],
+                        "工作经历":[]
                     }
                 """
 }
@@ -328,7 +340,7 @@ api_info = {
                 }],
             "model": "deepseek-chat",
             "frequency_penalty": 0,
-            "max_tokens": 4096,
+            "max_tokens": 8192,
             "presence_penalty": 0,
             "stop": None,
             "stream": False,
@@ -343,7 +355,7 @@ api_info = {
 semaphore = Semaphore(5)
 semaphore_api = Semaphore(20)
 
-api_base_url = 'https://api.deepseek.com/chat/completions'
+api_base_url = 'https://api.deepseek.com/beta/chat/completions'
 
 sf_password = 'Shufang_@919'
 
@@ -389,9 +401,12 @@ async def get_api_resp(session, data, api_headers):
     # async with semaphore_api:
     logger.info('request api to parse')
     # async with session.post(api_base_url, data=json.dumps(data), headers=api_headers,proxy='http://127.0.0.1:7890') as resp:
-    async with session.post(api_base_url, data=json.dumps(data), headers=api_headers) as resp:
-        if resp.ok:
-            return await resp.json()
+    try:
+        async with session.post(api_base_url, data=json.dumps(data), headers=api_headers) as resp:
+            if resp.ok:
+                return await resp.json()
+    except Exception as e:
+        logger.error('错误，即将重试或记录...')
 
 
 def api_payload_info(api, turn, content):
@@ -411,7 +426,15 @@ def list2str(result: dict):
             # if key in ('邮箱', '职称'):
             #     result[key] = ','.join(result[key])
             # else:
-            result[key] = '\n'.join(result[key])
+            temp_res = []
+            for item in result[key]:
+                if isinstance(item, dict):
+                    for child_key, child_value in item.items():
+                        temp_res.append(child_key + ':' + child_value)
+            if temp_res:
+                result[key] = '\n'.join(temp_res)
+            else:
+                result[key] = '\n'.join(result[key])
     return result
 
 def get_format_result(turn, content: dict, result_direct: dict, partition_num, img_url_head):
@@ -542,7 +565,8 @@ async def api_parse(result_gen, session, partition_num, img_url_head, cn_com):
                     api_result = re.sub(r'^.*?(\{.*}).*?$', r'\1', api_result, flags=re.S)
                     api_result = re.sub(r'(,\s*)(?=}$)', '', api_result, flags=re.S)
                     api_result = re.sub(r'<.*?>', '', api_result)
-                    api_result = json.loads(api_result, strict=False)
+                    # api_result = json.loads(api_result, strict=False)
+                    api_result = demjson3.decode(api_result)
                     api_result = list2str(api_result)
                     result = get_format_result(0, api_result, result_direct, partition_num, img_url_head)
                     # print(api_result)
@@ -560,7 +584,8 @@ async def api_parse(result_gen, session, partition_num, img_url_head, cn_com):
                         api_result = re.sub(r'^.*?(\{.*}).*?$', r'\1', api_result, flags=re.S)
                         api_result = re.sub(r'(,\s*)(?=}$)', '', api_result, flags=re.S)
                         api_result = re.sub(r'<.*?>', '', api_result)
-                        api_result = json.loads(api_result, strict=False)
+                        # api_result = json.loads(api_result, strict=False)
+                        api_result = demjson3.decode(api_result)
                         api_result = list2str(api_result)
                         result = get_format_result(0, api_result, result_direct, partition_num, img_url_head)
                         # print(api_result)
@@ -616,7 +641,8 @@ async def api_parse(result_gen, session, partition_num, img_url_head, cn_com):
                             api_result = re.sub(r'^.*?(\{.*}).*?$', r'\1', api_result, flags=re.S)
                             api_result = re.sub(r'(,\s*)(?=}$)', '', api_result, flags=re.S)
                             api_result = re.sub(r'<.*?>', '', api_result)
-                            api_result = json.loads(api_result, strict=False)
+                            # api_result = json.loads(api_result, strict=False)
+                            api_result = demjson3.decode(api_result)
                             api_result = list2str(api_result)
                             api_result = get_format_result(turn, api_result, result_direct, partition_num, img_url_head)
                             # print(api_result)
@@ -642,7 +668,8 @@ async def api_parse(result_gen, session, partition_num, img_url_head, cn_com):
                             api_result = re.sub(r'^.*?(\{.*}).*?$', r'\1', api_result, flags=re.S)
                             api_result = re.sub(r'(,\s*)(?=}$)', '', api_result, flags=re.S)
                             api_result = re.sub(r'<.*?>', '', api_result)
-                            api_result = json.loads(api_result, strict=False)
+                            # api_result = json.loads(api_result, strict=False)
+                            api_result = demjson3.decode(api_result)
                             api_result = list2str(api_result)
                             api_result = get_format_result(turn, api_result, result_direct, partition_num, img_url_head)
                             # print(api_result)

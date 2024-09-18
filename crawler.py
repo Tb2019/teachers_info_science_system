@@ -2,6 +2,7 @@ import csv
 import json
 import os
 import time
+import demjson3
 from bs4 import BeautifulSoup
 from lxml import etree
 from lxml.html import fromstring, tostring
@@ -162,8 +163,9 @@ class ReCrawler:
             name = a.xpath('.//text()')
             if name:
                 name = ''.join(name)
-                if not re.match(r'[A-Za-z\s]*$', name, re.S):  # 中文名替换空格
+                if not re.match(r'[A-Za-z\s]*$', name, re.S):  # 中文名替换全部空格，英文名保留中间空格
                     name = re.sub(r'\s*', '', name)
+                name = re.sub(r'^\s*(\w.*?\w)\s*$', r'\1', name)  # 去除姓名前后空白字符
                 name = re.sub(self.name_filter_re, '', name)
                 try:
                     link = a.xpath('./@href')[0]
@@ -656,16 +658,17 @@ class ReCrawler:
         tasks = [api_parse(result_gen, session, self.partition_num, self.img_url_head, self.cn_com) for result_gen in mid_result if result_gen]
         results = loop.run_until_complete(asyncio.gather(*tasks))
         session.connector.close()
-
+        temp = []
         for result in results:
             if isinstance(result, tuple):
                 self.api_cant.append(result[1])
-                results.remove(result)
+                # results.remove(result)  # 若两个连续的值需要remove，因为是原地操作会出现问题，修正了bug
             else:
+                temp.append(result)
                 self.writter.writerow(result.values())
 
         print('*** api failed ***', self.api_cant)
-        return pd.DataFrame(results)
+        return pd.DataFrame(temp)
 
 
     # @retry(exceptions=Exception, tries=1, delay=1)
@@ -861,7 +864,8 @@ class ReCrawler:
         # content = re.sub(r'\r|\n', '', content)
         # print(content)
         try:
-            content = json.loads(content, strict=False)
+            # content = json.loads(content, strict=False)
+            content = demjson3.decode(content)
             if re.search('<.*?>', str(content)):
                 logger.warning('发现html标签，即将重新生成')
                 raise
@@ -931,7 +935,8 @@ class ReCrawler:
                             content = self.driver.find_element(By.XPATH, selector.get('com-content-gpt-xpath')).get_attribute('innerText')
                     if isinstance(content, list):
                         content = ''.join(content)
-                    content = json.loads(content, strict=False)
+                    # content = json.loads(content, strict=False)
+                    content = demjson3.decode(content)
                     if re.search(r'<.*?>', str(content)):
                         logger.warning('发现html标签，即将重新生成')
                         raise
@@ -1090,7 +1095,8 @@ class ReCrawler:
 
         # 去重
         # result_df.drop_duplicates(inplace=True, keep='first', subset=['name', 'email'])
-        result_df = drop_duplicate_collage(self.result_df)
+        if not self.result_df.empty:
+            result_df = drop_duplicate_collage(self.result_df)
 
         # 保存至数据库
         if self.api:
