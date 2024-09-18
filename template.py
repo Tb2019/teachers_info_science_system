@@ -53,6 +53,7 @@ class SpecialSpider(ReCrawler):
                 name = ''.join(name)
                 if not re.match(r'[A-Za-z\s]*$', name, re.S):  # 中文名替换空格
                     name = re.sub(r'\s*', '', name)
+                name = re.sub(r'^\s*(\w.*?\w)\s*$', r'\1', name)
                 name = re.sub(self.name_filter_re, '', name)
                 try:
                     link = a.xpath('./@href')[0]
@@ -87,7 +88,7 @@ class SpecialSpider(ReCrawler):
             page, origin_url, info_s = detail_page
             page_tree = etree.HTML(page)
             try:
-                target_div = page_tree.xpath(self.target_div_xpath_str)[0]
+                target_div = page_tree.xpath(self.target_div_xpath_str)
             except:
                 print('未发现内容标签', origin_url)
                 return None
@@ -97,12 +98,26 @@ class SpecialSpider(ReCrawler):
             all_content = re.sub(r'-{5,}', '', all_content)
 
             if self.api or self.selenium_gpt:
+               content_with_label = ''
                 # 替代引号
-                replace_quotes_in_text(target_div)
-                content_with_label = tostring(target_div, encoding='utf-8').decode('utf-8')
+                for i in target_div:
+                    replace_quotes_in_text(i)
+                    content_with_label += tostring(i, encoding='utf-8').decode('utf-8')
                 # 去除base64编码的图片标签
                 soup = BeautifulSoup(content_with_label, 'html.parser')
                 base64_imgs = soup.find_all('img', src=re.compile(r'base64'))
+                #删除导航栏和页脚的尝试
+                try:
+                    back_img = soup.find('div', class_="banner")
+                    back_img_ = soup.find('div', id="banner")
+                    footer = soup.find('div', class_="footer")
+                    footer_ = soup.find('div', id="footer")
+                    back_img and back_img.decompose()
+                    back_img_ and back_img_.decompose()
+                    footer and footer.decompose()
+                    footer_ and footer_.decompose()
+                except:
+                    pass
                 for img in base64_imgs:
                     img.decompose()
                 # 去除除img标签外的所有标签属性
@@ -361,7 +376,8 @@ class SpecialSpider(ReCrawler):
 
         # 去重
         # result_df.drop_duplicates(inplace=True, keep='first', subset=['name', 'email'])
-        result_df = drop_duplicate_collage(self.result_df)
+        if not self.result_df.empty:
+            result_df = drop_duplicate_collage(self.result_df)
 
         # 保存至数据库
         if self.api:
