@@ -217,6 +217,8 @@ class ReCrawler:
                 content_with_label = str(soup)
                 # 去掉标签之间空白字符
                 content_with_label = re.sub(r'>\s*<', r'><', content_with_label)
+                # 去除注释内容
+                content_with_label = re.sub(r'<!--.*?-->', r'', content_with_label)
 
 
             # 姓名
